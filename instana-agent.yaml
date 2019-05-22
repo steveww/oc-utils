@@ -1,0 +1,214 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: instana-agent-secret
+type: Opaque
+data:
+  key: "c05rZk84OTNRTVctNThvMUJ4d2NJQQo="
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: instana-configuration
+data:
+  configuration.yaml: |
+    # Manual a-priori configuration. Configuration will be only used when the sensor
+    # is actually installed by the agent.
+    # The commented out example values represent example configuration and are not
+    # necessarily defaults. Defaults are usually 'absent' or mentioned separately.
+    # Changes are hot reloaded unless otherwise mentioned.
+
+    # It is possible to create files called 'configuration-abc.yaml' which are
+    # merged with this file in file system order. So 'configuration-cde.yaml' comes
+    # after 'configuration-abc.yaml'. Only nested structures are merged, values are
+    # overwritten by subsequent configurations.
+
+    # Secrets
+    # To filter sensitive data from collection by the agent, all sensors respect
+    # the following secrets configuration. If a key collected by a sensor matches
+    # an entry from the list, the value is redacted.
+    #com.instana.secrets:
+    #  # One of: 'equals-ignore-case', 'equals', 'contains-ignore-case', 'contains', 'regex'
+    #  matcher: 'contains-ignore-case'
+    #  list:
+    #    - 'key'
+    #    - 'password'
+    #    - 'secret'
+
+    # Host
+    #com.instana.plugin.host:
+    #  tags:
+    #    - 'dev'
+    #    - 'app1'
+
+    # Hardware & Zone
+    #com.instana.plugin.generic.hardware:
+    #  enabled: true # disabled by default
+    #  availability-zone: 'zone'
+---
+kind: ClusterRole
+apiVersion: v1
+metadata:
+  name: instana-agent-role
+rules:
+- nonResourceURLs:
+    - "/version"
+    - "/healthz"
+  verbs: ["get"]
+- apiGroups: ["batch"]
+  resources:
+    - "jobs"
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["extensions"]
+  resources:
+    - "deployments"
+    - "replicasets"
+    - "ingresses"
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources:
+    - "deployments"
+    - "replicasets"
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps.openshift.io"]
+  resources:
+    - "deploymentconfigs"
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources:
+    - "namespaces"
+    - "events"
+    - "services"
+    - "endpoints"
+    - "nodes"
+    - "pods"
+    - "replicationcontrollers"
+    - "componentstatuses"
+    - "resourcequotas"
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources:
+    - "endpoints"
+  verbs: ["create", "update", "patch"]
+---
+kind: ClusterRoleBinding
+apiVersion: v1
+metadata:
+  name: instana-agent-role-binding
+  namespace: instana-agent
+subjects:
+- kind: ServiceAccount
+  name: instana-admin
+  namespace: instana-agent
+roleRef:
+  kind: ClusterRole
+  name: instana-agent-role
+---
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: instana-agent
+spec:
+  template:
+    metadata:
+      labels:
+        app: instana-agent
+    spec:
+      nodeSelector:
+        type: infra
+      serviceAccount: instana-admin
+      hostIPC: true
+      hostNetwork: true
+      hostPID: true
+      containers:
+        - name: instana-agent
+          image: instana/agent
+          imagePullPolicy: Always
+          env:
+            - name: INSTANA_AGENT_LEADER_ELECTOR_PORT
+              value: "42655"
+            - name: INSTANA_ZONE
+              value: MiniShift
+            - name: INSTANA_AGENT_ENDPOINT
+              value: saas-eu-west-1.instana.io
+            - name: INSTANA_AGENT_ENDPOINT_PORT
+              value: "443"
+            - name: INSTANA_AGENT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: instana-agent-secret
+                  key: key
+            - name: JAVA_OPTS
+              # Approximately 1/3 of container memory limits to allow for direct-buffer memory usage and JVM overhead
+              value: "-Xmx170M -XX:+ExitOnOutOfMemoryError"
+            - name: INSTANA_AGENT_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: dev
+              mountPath: /dev
+            - name: run
+              mountPath: /var/run
+            - name: sys
+              mountPath: /sys
+            - name: log
+              mountPath: /var/log
+            - name: machine-id
+              mountPath: /etc/machine-id
+            - name: configuration
+              subPath: configuration.yaml
+              mountPath: /root/configuration.yaml
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: 42699
+            initialDelaySeconds: 75
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "0.5"
+            limits:
+              memory: "512Mi"
+              cpu: "1.5"
+        - name: instana-agent-leader-elector
+          image: gcr.io/google-containers/leader-elector:0.5
+          env:
+            - name: INSTANA_AGENT_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          args: ["--election=instana", "--http=0.0.0.0:42655", "--id=$(INSTANA_AGENT_POD_NAME)"]
+          resources:
+            requests:
+              cpu: "0.1"
+              memory: "64Mi"
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: 42699
+            initialDelaySeconds: 75
+            periodSeconds: 5
+      volumes:
+        - name: dev
+          hostPath:
+            path: /dev
+        - name: run
+          hostPath:
+            path: /var/run
+        - name: sys
+          hostPath:
+            path: /sys
+        - name: log
+          hostPath:
+            path: /var/log
+        - name: machine-id
+          hostPath:
+            path: /etc/machine-id
+        - name: configuration
+          configMap:
+            name: instana-configuration
+
