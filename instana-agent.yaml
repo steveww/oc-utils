@@ -4,7 +4,7 @@ metadata:
   name: instana-agent-secret
 type: Opaque
 data:
-  key: "c05rZk84OTNRTVctNThvMUJ4d2NJQQo="
+  key: <your instana agent key base64 encoded>
 ---
 apiVersion: v1
 kind: ConfigMap
