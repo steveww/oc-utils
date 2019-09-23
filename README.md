@@ -18,10 +18,12 @@ The insecure registry is the internal OpenShift registry. Images will be pushed 
 
 Due to extensive use of iptables, evrything must be run as root.
 
+Use the `cluster-up.sh` script or enter the following by hand.
+
 ```shell
 $ oc cluster up \
 --base-dir=$HOME/oc-cluster \
---public-hostname=aws.eu-west-1.amazon.com \
+--public-hostname=$PUBLIC_DNS_NAME_FOR_YOUR_EC2 \
 --skip-registry-check=true
 ```
 
@@ -29,7 +31,7 @@ You **must** set public hostname the first time that the cluster is created, it 
 
 Once the cluster up command has completed the console is accessed via
 
-https://aws.eu-west-1.amazon.com:8443/console
+https://your-ec2-instance.amazon.com:8443/console
 
 The /console on the end is **important**
 
