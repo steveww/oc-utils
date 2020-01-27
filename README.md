@@ -2,6 +2,8 @@
 
 - Do not use Ubuntu nor AWS Linux as the base OS. Ubuntu has DNS issues inside the containers, see [stack overflow](https://stackoverflow.com/questions/20430371/my-docker-container-has-no-internet/45644890#45644890). AWS Linux has Docker issues.
 - CentOS appears to work OK. Use the commercial AMI on EC2.
+- Instance type `t2.2xlarge`
+- Login user `centos`
 - Install [oc and kubectl](https://www.okd.io/download.html) both are in the download
 - Install [docker ce](https://docs.docker.com/install/)
 - Edit */etc/docker/daemon.json*
