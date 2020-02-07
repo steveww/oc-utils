@@ -5,7 +5,7 @@
 - Instance type `t2.2xlarge` with 100GB disk
 - Login user `centos`
 - Install [oc and kubectl](https://www.okd.io/download.html) both are in the download
-- Install [docker ce](https://docs.docker.com/install/)
+- Install Docker CE `$ curl -L https://get.docker.com/ | sh`
 - Edit */etc/docker/daemon.json*
 
 ```json
